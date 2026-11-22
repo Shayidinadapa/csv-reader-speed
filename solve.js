@@ -211,44 +211,45 @@ export function run(input) {
   // with endKind 0 = comma, 1 = line break, 2 = EOF. A CR not followed by
   // LF is dropped and reported; CRLF ends the record.
   function unquoted(start, recLine, recRow) {
-    let cur = start;
-    let pieces = null;
-    for (;;) {
-      const ci = text.indexOf(",", cur);
-      const ni = text.indexOf("\n", cur);
-      const ri = text.indexOf("\r", cur);
-      let m = -1;
-      let kind = -1;
-      if (ci !== -1) {
-        m = ci;
-        kind = 0;
-      }
-      if (ni !== -1 && (m === -1 || ni < m)) {
-        m = ni;
-        kind = 1;
-      }
-      if (ri !== -1 && (m === -1 || ri < m)) {
-        m = ri;
-        kind = 2;
-      }
-      if (m === -1) {
-        const tail = text.slice(cur);
-        return [pieces === null ? tail : pieces.join("") + tail, 2, len];
-      }
-      if (kind === 2) {
-        if (text.charCodeAt(m + 1) === LF) {
-          const tail = text.slice(cur, m);
-          return [pieces === null ? tail : pieces.join("") + tail, 1, m + 2];
+    // Two indexOf calls find the field end; a stray CR inside the value is
+    // rare, so it is detected on the (short) value and re-parsed then.
+    const ci = text.indexOf(",", start);
+    const ni = text.indexOf("\n", start);
+    let m;
+    let kind;
+    if (ci !== -1 && (ni === -1 || ci < ni)) {
+      m = ci;
+      kind = 0;
+    } else if (ni !== -1) {
+      m = ni;
+      kind = 1;
+    } else {
+      m = len;
+      kind = 2;
+    }
+    let value = text.slice(start, m);
+    if (kind === 1 && value.length > 0 && value.charCodeAt(value.length - 1) === CR) {
+      value = value.slice(0, -1);
+    }
+    if (value.indexOf("\r") !== -1) {
+      // lone CR(s) inside: drop each, report it, keep the rest
+      let out = "";
+      let cur = 0;
+      for (;;) {
+        const r = value.indexOf("\r", cur);
+        if (r === -1) {
+          out += value.slice(cur);
+          break;
         }
         errors.push({ code: "stray_cr", line: recLine, row: recRow });
-        if (pieces === null) pieces = [];
-        pieces.push(text.slice(cur, m));
-        cur = m + 1;
-        continue;
+        out += value.slice(cur, r);
+        cur = r + 1;
       }
-      const tail = text.slice(cur, m);
-      return [pieces === null ? tail : pieces.join("") + tail, kind === 0 ? 0 : 1, m + 1];
+      value = out;
     }
+    if (kind === 0) return [value, 0, m + 1];
+    if (kind === 1) return [value, 1, m + 1];
+    return [value, 2, len];
   }
 
   // Width check + store for one materialized record.
