@@ -1,10 +1,16 @@
 import { setFlagsFromString } from "node:v8";
 setFlagsFromString("--no-incremental-marking");
 import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const { run } = await import("./solve.js");
 
-const cases = JSON.parse(readFileSync("/input/cases.json", "utf8"));
+// In the container the mounts are /input and /output; outside it the
+// harness names them through env vars (the scorer does the same).
+const inputDir = process.env.MAKEFUN_INPUT_DIR ?? "/input";
+const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+
+const cases = JSON.parse(readFileSync(join(inputDir, "cases.json"), "utf8"));
 const answers = new Array(cases.length);
 for (let i = 0; i < cases.length; i++) answers[i] = run(cases[i].input);
-writeFileSync("/output/answers.json", JSON.stringify(answers));
+writeFileSync(join(outputDir, "answers.json"), JSON.stringify(answers));
